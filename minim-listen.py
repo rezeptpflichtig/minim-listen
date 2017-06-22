@@ -37,6 +37,7 @@ def logtail():
                             # if the filename is the same as the last one, check how much time has passed; if a minute it is and it was less than a minute ago, pass on that one
                             pass
                         else:
+                            lasthit = file
                             fp = path + file.rstrip() # assemble the full path to the file
                             print(fp) #verbose
                             readtags(fp) # pass to mutagen
