@@ -40,7 +40,9 @@ def logtail():
                             lasthit = file
                             fp = path + file.rstrip() # assemble the full path to the file
                             print(fp) #verbose
-                            readtags(fp) # pass to mutagen
+                            trackmetadata = readtags(fp) # read metadata
+                            listen = write_listen(trackmetadata)
+                            send_listen(listen)
                             time.sleep(0.5) # decrease cpu load
                         oldtime = nowtime
                 prevline = line
@@ -50,60 +52,65 @@ def logtail():
 def readtags(fp):
     '''Extract relevant Metainformation via mutagen'''
     f = mutagen.File(fp)
+    # list of tags to query
+    tagsflac_basic = {
+                'artist_name': 'artist',
+                'track_name': 'title',
+                'release_name': 'album'}
+    tagsflac_additional = {
+                'release_mbid': 'musicbrainz_albumid',
+                'recording_mbid': 'musicbrainz_trackid',
+                'artist_mbids': 'musicbrainz_artistid',
+                'rating': 'rating'}
+    tagsmp3_basic =  {
+                'artist_name': 'TPE1',
+                'track_name': 'TIT2',
+                'release_name': 'TALB'}
+    tagsmp3_additional = {
+                'release_mbid': 'TXXX:MusicBrainz Album Id',
+                'recording_mbid': 'TXXX:MusicBrainz Release Track Id',
+                'artist_mbids': 'TXXX:MusicBrainz Artist Id',
+                'rating': 'TXXX:rating'}
+    trackmetadata = {'additional_info': {}}
     if f.__class__.__name__ == 'FLAC':
-        artistname = f["artist"][0]
-        trackname = f["title"][0]
-        releasename = f["album"][0]
-        releasembid = f["musicbrainz_albumid"][0]
-        recordingmbid = f["musicbrainz_trackid"][0]
-        artistmbids = f["musicbrainz_artistid"]
+        for i in tagsflac_basic:
+            if tagsflac_basic[i] in f:
+                trackmetadata[i] = f[tagsflac_basic[i]][0]
+        for i in tagsflac_additional:
+            if tagsflac_additional[i] in f:
+                if i == 'artist_mbids':
+                    trackmetadata['additional_info'][i] = f[tagsflac_additional[i]]
+                else:
+                    trackmetadata['additional_info'][i] = f[tagsflac_additional[i]][0]
     elif f.__class__.__name__ == 'MP3':
-        artistname = f["TPE1"][0]   # Trackartist
-        trackname = f["TIT2"][0]    # Trackname
-        releasename = f["TALB"][0]  # Release Name
-        releasembid = f["TXXX:MusicBrainz Album Id"][0]
-        recordingmbid = f["TXXX:MusicBrainz Release Track Id"][0]
-        artistmbids = f["TXXX:MusicBrainz Artist Id"].text
-    write_listen(artistname,trackname,releasename,releasembid,recordingmbid,artistmbids)
+        for i in tagsflac_basic:
+            if tagsmp3_basic[i] in f:
+                trackmetadata[i] = f[tagsmp3_basic[i]][0]
+        for i in tagsmp3_additional:
+            if tagsmp3_additional[i] in f:
+                if i == 'artist_mbids':
+                    trackmetadata['additional_info'][i] = f[tagsmp3_additional[i]].text
+                else:
+                    trackmetadata['additional_info'][i] = f[tagsmp3_additional[i]][0]
+    return trackmetadata
 
-def write_listen(artistname,trackname,releasename,releasembid,recordingmbid,artistmbids):
-    '''Write a JSON blob. This could be probably done better with creating a json object instead of glueing together a str'''
-    listen = ('{\n'
-              '  "listen_type": "single",\n'
-              '  "payload": [\n'
-              '    {\n'
-              '      "listened_at": ' + str((int(time.time()))) + ',\n'
-              '      "track_metadata": {\n'
-              '        "additional_info": {\n'
-              '          "release_mbid": "' + releasembid  + '",\n'
-              '          "artist_mbids": [\n')
-    if isinstance(artistmbids,str):
-        listen = (listen + ''
-              '            "' + artistmbids[0] + '"\n')
-    elif isinstance(artistmbids,list): # if multiple artistmbids present, omit the last comma
-        for i in artistmbids[:-1]:
-            listen = (listen + '            "' + i + '",\n')
-        listen = (listen + '            "' + artistmbids[-1] + '"\n')
-    listen = (listen + ''
-              '          ],\n'
-              '          "recording_mbid": "' + recordingmbid + '"\n'
-              '        },\n'
-              '        "artist_name": "' + artistname + '",\n'
-              '        "track_name": "' + trackname + '",\n'
-              '        "release_name": "' + releasename + '"\n'
-              '      }\n'
-              '    }\n'
-              '  ]\n'
-              '}')
-    print('')     # verbose
-    print(listen) # verbose
-    send_listen(listen)
+def write_listen(tm):
+    listen = {
+               'listen_type': 'single',
+               'payload': [
+                 {
+                   'listened_at': int(time.time()),
+                   'track_metadata': tm
+                 }
+               ]
+             }
+    pprint.pprint(listen) #debug
+    return listen
 
 def send_listen(listen):
     url = 'https://api.listenbrainz.org/1/submit-listens'
-    payload = json.loads(listen)
     headers = {'content-type': 'application/json', 'Authorization': 'token ' + lbtoken}
-    r = requests.post(url, data=json.dumps(payload), headers=headers)
+    r = requests.post(url, data=json.dumps(listen), headers=headers)
     print(r.status_code, r.reason, r.text)
 
 logtail()
