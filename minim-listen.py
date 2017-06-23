@@ -20,7 +20,7 @@ def logtail():
     pattern2 = re.compile('(?<=from file ).*')
     try:
         for line in Pygtail(minimlog):
-            # go o end of logfile
+            # go to end of logfile since no accurate timestamp can be created for old data
             pass
         while True:
             # poll the logfile
@@ -32,7 +32,6 @@ def logtail():
                     if hit1:
                         nowtime = time.time()
                         file = hit1.group(0)
-                        #print(file) # verbose debug
                         if (file == lasthit) and (nowtime - oldtime < 59):
                             # if the filename is the same as the last one, check how much time has passed; if a minute it is and it was less than a minute ago, pass on that one
                             pass
@@ -52,7 +51,7 @@ def logtail():
 def readtags(fp):
     '''Extract relevant Metainformation via mutagen'''
     f = mutagen.File(fp)
-    # list of tags to query
+    # list of tags to query, add any custom tag to '*_additional' you want to submit
     tagsflac_basic = {
                 'artist_name': 'artist',
                 'track_name': 'title',
@@ -71,27 +70,27 @@ def readtags(fp):
                 'recording_mbid': 'TXXX:MusicBrainz Release Track Id',
                 'artist_mbids': 'TXXX:MusicBrainz Artist Id',
                 'rating': 'TXXX:rating'}
-    trackmetadata = {'additional_info': {}}
+    trackmetadata = {'additional_info': {}} #initialize dict for metadata json
     if f.__class__.__name__ == 'FLAC':
-        for i in tagsflac_basic:
-            if tagsflac_basic[i] in f:
-                trackmetadata[i] = f[tagsflac_basic[i]][0]
-        for i in tagsflac_additional:
-            if tagsflac_additional[i] in f:
-                if i == 'artist_mbids':
-                    trackmetadata['additional_info'][i] = f[tagsflac_additional[i]]
-                else:
-                    trackmetadata['additional_info'][i] = f[tagsflac_additional[i]][0]
+        tags_basic = tagsflac_basic
+        tags_additional = tagsflac_additional
+        fileformat = 'FLAC'
     elif f.__class__.__name__ == 'MP3':
-        for i in tagsflac_basic:
-            if tagsmp3_basic[i] in f:
-                trackmetadata[i] = f[tagsmp3_basic[i]][0]
-        for i in tagsmp3_additional:
-            if tagsmp3_additional[i] in f:
-                if i == 'artist_mbids':
-                    trackmetadata['additional_info'][i] = f[tagsmp3_additional[i]].text
-                else:
-                    trackmetadata['additional_info'][i] = f[tagsmp3_additional[i]][0]
+        tags_basic = tagsmp3_basic
+        tags_additional = tagsmp3_additional
+        fileformat = 'MP3'
+    for i in tags_basic:
+        if tags_basic[i] in f:
+            trackmetadata[i] = f[tags_basic[i]][0]
+    for i in tags_additional:
+        if tags_additional[i] in f:
+            if i == 'artist_mbids':
+                if fileformat == 'FLAC':
+                    trackmetadata['additional_info'][i] = f[tags_additional[i]]
+                elif fileformat == 'MP3':
+                    trackmetadata['additional_info'][i] = f[tags_additional[i]].text
+            else:
+                trackmetadata['additional_info'][i] = f[tags_additional[i]][0]
     return trackmetadata
 
 def write_listen(tm):
