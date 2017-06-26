@@ -1,7 +1,7 @@
 #!/usr/local/bin/env python3
 
 from pygtail import Pygtail
-import mutagen, time, re, requests, json, pprint
+import mutagen, time, re, requests, json, pprint, configparser
 
 #path to you library
 path = '/media/archiv/'
