@@ -59,6 +59,7 @@ def readtags(fp):
     tagsflac_additional = {
                 'release_mbid': 'musicbrainz_albumid',
                 'recording_mbid': 'musicbrainz_trackid',
+                'track_mbid': 'musicbrainz_releasetrackid',
                 'artist_mbids': 'musicbrainz_artistid',
                 'rating': 'rating'}
     tagsmp3_basic =  {
@@ -67,7 +68,8 @@ def readtags(fp):
                 'release_name': 'TALB'}
     tagsmp3_additional = {
                 'release_mbid': 'TXXX:MusicBrainz Album Id',
-                'recording_mbid': 'TXXX:MusicBrainz Release Track Id',
+                'track_mbid': 'TXXX:MusicBrainz Release Track Id',
+                'recording_mbid': 'UFID:http://musicbrainz.org',
                 'artist_mbids': 'TXXX:MusicBrainz Artist Id',
                 'rating': 'TXXX:rating'}
     trackmetadata = {'additional_info': {}} #initialize dict for metadata json
@@ -84,11 +86,15 @@ def readtags(fp):
             trackmetadata[i] = f[tags_basic[i]][0]
     for i in tags_additional:
         if tags_additional[i] in f:
-            if i == 'artist_mbids':
+            # handle different handling of artist_mbids for MP3
+            if i == 'artist_mbids': 
                 if fileformat == 'FLAC':
                     trackmetadata['additional_info'][i] = f[tags_additional[i]]
                 elif fileformat == 'MP3':
                     trackmetadata['additional_info'][i] = f[tags_additional[i]].text
+            # handle recording_mbid differences with MP3
+            elif i == 'recording_mbid' and fileformat == 'MP3':
+                trackmetadata['additional_info'][i] = f[tags_additional[i]].data.decode('utf-8')
             else:
                 trackmetadata['additional_info'][i] = f[tags_additional[i]][0]
     return trackmetadata
