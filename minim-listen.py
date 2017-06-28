@@ -1,16 +1,10 @@
 #!/usr/local/bin/env python3
 
 from pygtail import Pygtail
-import mutagen, time, re, requests, json, pprint
+import mutagen, time, re, requests, json, pprint, configparser
 
-#path to you library
-path = '/media/archiv/'
-
-# the verbose logfile from minimserver
-minimlog = '/media/minimserver.log'
-
-#Your listenbrainz token
-lbtoken = 'YOURTOKEN'
+cfg = configparser.ConfigParser()
+cfg.read('config.ini')
 
 def logtail():
     prevline = ''
@@ -18,6 +12,8 @@ def logtail():
     oldtime = 0
     pattern = re.compile('(Content-Type: audio)')
     pattern2 = re.compile('(?<=from file ).*')
+    minimlog = cfg['DEFAULT']['minimlog']
+    path = cfg['DEFAULT']['medialib']
     try:
         for line in Pygtail(minimlog):
             # go to end of logfile since no accurate timestamp can be created for old data
@@ -33,7 +29,7 @@ def logtail():
                         nowtime = time.time()
                         file = hit1.group(0)
                         if (file == lasthit) and (nowtime - oldtime < 59):
-                            # if the filename is the same as the last one, check how much time has passed; if a minute it is and it was less than a minute ago, pass on that one
+                            # if the filename is the same as the last one, check how much time has passed; if it is and it was less than a minute ago, pass on that one
                             pass
                         else:
                             lasthit = file
@@ -114,7 +110,7 @@ def write_listen(tm):
 
 def send_listen(listen):
     url = 'https://api.listenbrainz.org/1/submit-listens'
-    headers = {'content-type': 'application/json', 'Authorization': 'token ' + lbtoken}
+    headers = {'content-type': 'application/json', 'Authorization': 'token ' + path = cfg['listenbrainz.org']['token']}
     r = requests.post(url, data=json.dumps(listen), headers=headers)
     print(r.status_code, r.reason, r.text)
 
