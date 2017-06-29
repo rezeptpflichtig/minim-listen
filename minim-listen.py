@@ -7,7 +7,8 @@ cfg = configparser.ConfigParser()
 cfg.read('config.ini')
 
 def logtail():
-    prevline = ''
+    prev_line = ''
+    prev_listen = ''
     lasthit = ''
     oldtime = 0
     pattern = re.compile('(Content-Type: audio)')
@@ -20,9 +21,9 @@ def logtail():
             pass
         while True:
             # poll the logfile
-            time.sleep(0.5) # decrease cpu load
+            time.sleep(0.2) # decrease cpu load
             for line in Pygtail(minimlog):
-                hit2 = re.search(pattern, prevline) # check if "Contentype: audio" is present in the previous line
+                hit2 = re.search(pattern, prev_line) # check if "Contentype: audio" is present in the previous line
                 if hit2:
                     hit1 = re.search(pattern2, line) # match the filename that was served
                     if hit1:
@@ -33,14 +34,30 @@ def logtail():
                             pass
                         else:
                             lasthit = file
-                            fp = path + file.rstrip() # assemble the full path to the file
-                            print(fp) #verbose
-                            trackmetadata = readtags(fp) # read metadata
-                            listen = write_listen(trackmetadata)
-                            send_listen(listen)
-                            time.sleep(0.5) # decrease cpu load
+                            fp = path + file.rstrip()                           # assemble the full path to the file
+                            #print(fp)                                           # verbose output
+                            trackmetadata = readtags(fp)                        # read metadata of current file
+                            listen = write_listen('playing_now', trackmetadata) # create a playing_now listen
+                            print('now playing: ' + fp)
+                            send_listen(listen)                                 # send that playing now listen to listenbrainz
+                            time.sleep(0.2)                                     # decrease cpu load
+                            if prev_listen != '':
+                                if prev_listen['payload'][0]['track_metadata']['additional_info']['length'] < 90:
+                                    print(str(time.time()) + ': you listened to: ' + prev_listen['payload'][0]['track_metadata']['artist_name'] + ' - ' + prev_listen['payload'][0]['track_metadata']['track_name'])
+                                    send_listen(prev_listen)
+                                elif (listen['payload'][0]['listened_at'] - prev_listen['payload'][0]['listened_at']) > (prev_listen['payload'][0]['track_metadata']['additional_info']['length'] / 2):
+                                    # if there was a previous listen and if more than half the songlenght has passed, send out the listen as 'single' type listen
+                                    print(str(time.time()) + ': you listened to: ' + prev_listen['payload'][0]['track_metadata']['artist_name'] + ' - ' + prev_listen['payload'][0]['track_metadata']['track_name'])
+                                    send_listen(prev_listen)
+                            prev_listen = listen
+                            prev_listen['listen_type'] = 'single'
                         oldtime = nowtime
-                prevline = line
+                prev_line = line
+            # send single listen if time of the last track has passed and no new file started playing
+            if prev_listen != '' and (time.time() - prev_listen['payload'][0]['listened_at']) > prev_listen['payload'][0]['track_metadata']['additional_info']['length']:
+                print(str(time.time()) + ': you listened to: ' + prev_listen['payload'][0]['track_metadata']['artist_name'] + ' - ' + prev_listen['payload'][0]['track_metadata']['track_name'])
+                send_listen(prev_listen)
+                prev_listen = ''
     except KeyboardInterrupt:
         pass
 
@@ -83,7 +100,7 @@ def readtags(fp):
     for i in tags_additional:
         if tags_additional[i] in f:
             # handle different handling of artist_mbids for MP3
-            if i == 'artist_mbids': 
+            if i == 'artist_mbids':
                 if fileformat == 'FLAC':
                     trackmetadata['additional_info'][i] = f[tags_additional[i]]
                 elif fileformat == 'MP3':
@@ -93,11 +110,13 @@ def readtags(fp):
                 trackmetadata['additional_info'][i] = f[tags_additional[i]].data.decode('utf-8')
             else:
                 trackmetadata['additional_info'][i] = f[tags_additional[i]][0]
+    # add the audiolength in seconds (float)
+    trackmetadata['additional_info']['length'] = f.info.length
     return trackmetadata
 
-def write_listen(tm):
+def write_listen(type, tm):
     listen = {
-               'listen_type': 'single',
+               'listen_type': type,
                'payload': [
                  {
                    'listened_at': int(time.time()),
@@ -105,13 +124,14 @@ def write_listen(tm):
                  }
                ]
              }
-    pprint.pprint(listen) #debug
+    #pprint.pprint(listen) #debug
     return listen
 
 def send_listen(listen):
     url = 'https://api.listenbrainz.org/1/submit-listens'
-    headers = {'content-type': 'application/json', 'Authorization': 'token ' + path = cfg['listenbrainz.org']['token']}
+    headers = {'content-type': 'application/json', 'Authorization': 'token ' + cfg['listenbrainz.org']['token']}
     r = requests.post(url, data=json.dumps(listen), headers=headers)
+    #pprint.pprint(listen)
     print(r.status_code, r.reason, r.text)
 
 logtail()
