@@ -110,7 +110,7 @@ def write_listen(tm):
 
 def send_listen(listen):
     url = 'https://api.listenbrainz.org/1/submit-listens'
-    headers = {'content-type': 'application/json', 'Authorization': 'token ' + path = cfg['listenbrainz.org']['token']}
+    headers = {'content-type': 'application/json', 'Authorization': 'token ' + cfg['listenbrainz.org']['token']}
     r = requests.post(url, data=json.dumps(listen), headers=headers)
     print(r.status_code, r.reason, r.text)
 
